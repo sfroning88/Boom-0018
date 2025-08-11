@@ -1,2 +1,2 @@
-def convert_c2x():
-    pass
+def convert_t2c(file=None):
+    return file
