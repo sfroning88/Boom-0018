@@ -11,22 +11,33 @@ ngrok_token = os.environ.get('NGROK_API_TOKEN')
 
 @app.route('/')
 def home():
+    # render base home template
     return render_template('chat.html')
 
-# generic button function
-@app.route('/BUTTON_FUNCTION_ONE', methods=['POST'])
-def BUTTON_FUNCTION_ONE():
-    try:
-        return jsonify({'success': True, 'message': 'Button Function One success.'}), 200
+# upload the txt file
+@app.route('/UPLOAD_TXT_FILE', methods=['POST'])
+def UPLOAD_TXT_FILE():
+    import support.config
+    from support.extension import ALLOWED_EXTENSIONS, retrieve_extension
+    from support.generate import generate_code
     
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 400
+    file = request.files.get('file')
+    if not file:
+            return jsonify({'success': False, 'message': 'No file detected.'}), 400
 
-# generic button function
-@app.route('/BUTTON_FUNCTION_TWO', methods=['POST'])
-def BUTTON_FUNCTION_TWO():
+    code = generate_code(file.filename)
+
+    exte = retrieve_extension(file.filename)
+    if exte not in ALLOWED_EXTENSIONS:
+        return jsonify({'success': False, 'message': 'Incorrect filetype uplaoded.'}), 400
+
+    return jsonify({'success': True, 'message': 'Uplaoding txt file success.'}), 200
+
+# download the xlsx file
+@app.route('/DOWNLOAD_XLSX_FILE', methods=['POST'])
+def DOWNLOAD_XLSX_FILE():
     try:
-        return jsonify({'success': True, 'message': 'Button Function Two success.'}), 200
+        return jsonify({'success': True, 'message': 'Downloading xlsx file success.'}), 200
     
     except Exception as e:
         return jsonify({'success': False, 'message': str(e)}), 400
@@ -64,9 +75,13 @@ if __name__ == '__main__':
 
     print("##############################_APP_BEGIN_##############################")
 
-    # Static domain is configured in api/connect.py
-    print(f"CHECKPOINT: Using static domain: https://guiding-needlessly-mallard.ngrok-free.app/oauth/callback")
+    # dictionary for uploaded files
+    import support.config
+    support.config.files = {}
+    print(f"CHECKPOINT: Files dictionary initialized: {'Yes' if support.config.files is not None else 'No'}")
 
+    print(f"CHECKPOINT: Using static domain: https://guiding-needlessly-mallard.ngrok-free.app/oauth/callback")
+    
     print("##############################_APP_END_##############################")
 
     # run the app
