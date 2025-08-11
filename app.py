@@ -17,21 +17,36 @@ def home():
 # upload the txt file
 @app.route('/UPLOAD_TXT_FILE', methods=['POST'])
 def UPLOAD_TXT_FILE():
-    import support.config
-    from support.extension import ALLOWED_EXTENSIONS, retrieve_extension
-    from support.generate import generate_code
-    
     file = request.files.get('file')
     if not file:
             return jsonify({'success': False, 'message': 'No file detected.'}), 400
 
-    code = generate_code(file.filename)
-
+    from support.extension import ALLOWED_EXTENSIONS, retrieve_extension
     exte = retrieve_extension(file.filename)
     if exte not in ALLOWED_EXTENSIONS:
-        return jsonify({'success': False, 'message': 'Incorrect filetype uplaoded.'}), 400
+        return jsonify({'success': False, 'message': 'Incorrect filetype uploaded.'}), 400
 
-    return jsonify({'success': True, 'message': 'Uplaoding txt file success.'}), 200
+    from functions.t2c import convert_t2c
+    extract = convert_t2c(file=file)
+
+    if extract is None:
+        print(f"ERROR: File was not converted into csv successfully")
+        return jsonify({'success': False, 'message': 'Could not convert to csv.'}), 400
+
+    from functions.c2x import convert_c2x
+    polished = convert_c2x(extract=extract)
+
+    if polished is None:
+        print(f"ERROR: File was not converted into xlsx successfully")
+        return jsonify({'success': False, 'message': 'Could not convert to xlsx.'}), 400
+
+    from support.generate import generate_code
+    code = generate_code(file.filename)
+
+    import support.config
+    support.config.files[code] = {'filename': file.filename, 'content': polished}
+
+    return jsonify({'success': True, 'message': 'Uploading txt file success.'}), 200
 
 # download the xlsx file
 @app.route('/DOWNLOAD_XLSX_FILE', methods=['POST'])
