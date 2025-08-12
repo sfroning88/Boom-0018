@@ -22,21 +22,20 @@ def UPLOAD_TXT_FILE():
             return jsonify({'success': False, 'message': 'No file detected.'}), 400
 
     from support.extension import ALLOWED_EXTENSIONS, retrieve_extension
-    exte = retrieve_extension(file.filename)
-    if exte not in ALLOWED_EXTENSIONS:
+    if retrieve_extension(file.filename) not in ALLOWED_EXTENSIONS:
         return jsonify({'success': False, 'message': 'Incorrect filetype uploaded.'}), 400
 
     from functions.t2c import convert_t2c
-    extract = convert_t2c(file=file)
+    converted_file = convert_t2c(file=file)
 
-    if extract is None:
+    if converted_file is None:
         print(f"ERROR: File was not converted into csv successfully")
         return jsonify({'success': False, 'message': 'Could not convert to csv.'}), 400
 
     from functions.c2x import convert_c2x
-    polished = convert_c2x(extract=extract)
+    converted_file = convert_c2x(converted_file=converted_file)
 
-    if polished is None:
+    if converted_file is None:
         print(f"ERROR: File was not converted into xlsx successfully")
         return jsonify({'success': False, 'message': 'Could not convert to xlsx.'}), 400
 
@@ -44,18 +43,47 @@ def UPLOAD_TXT_FILE():
     code = generate_code(file.filename)
 
     import support.config
-    support.config.files[code] = {'filename': file.filename, 'content': polished}
+    support.config.files[code] = {'filename': file.filename, 'content': converted_file}
 
     return jsonify({'success': True, 'message': 'Uploading txt file success.'}), 200
 
 # download the xlsx file
 @app.route('/DOWNLOAD_XLSX_FILE', methods=['POST'])
 def DOWNLOAD_XLSX_FILE():
-    try:
-        return jsonify({'success': True, 'message': 'Downloading xlsx file success.'}), 200
+    import support.config
+    from tqdm import tqdm
+    import os
     
-    except Exception as e:
-        return jsonify({'success': False, 'message': str(e)}), 400
+    if not support.config.files:
+        return jsonify({'success': False, 'message': 'No files available for download.'}), 400
+    
+    # Create downloads directory if it doesn't exist
+    downloads_dir = os.path.expanduser("~/Downloads")
+    if not os.path.exists(downloads_dir):
+        downloads_dir = os.getcwd()  # Fallback to current directory
+    
+    print(f"Starting download of {len(support.config.files)} files...")
+    
+    # Download each file with progress bar
+    for code, file_info in tqdm(support.config.files.items(), desc="Downloading files"):
+        filename = file_info['filename']
+        content = file_info['content']
+        
+        # Generate Excel filename
+        excel_filename = os.path.splitext(filename)[0] + '.xlsx'
+        file_path = os.path.join(downloads_dir, excel_filename)
+        
+        try:
+            # Reset buffer position and write to file
+            content.seek(0)
+            with open(file_path, 'wb') as f:
+                f.write(content.read())
+            print(f"Downloaded: {excel_filename}")
+        except Exception as e:
+            print(f"ERROR: Could not download {excel_filename}: {e}")
+    
+    print("Download complete!")
+    return jsonify({'success': True, 'message': f'Downloaded {len(support.config.files)} files to {downloads_dir}'}), 200
     
 if __name__ == '__main__':
     if len(sys.argv) != 1:
