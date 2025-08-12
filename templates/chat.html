@@ -256,35 +256,115 @@
             '</div>'
           );
 
-          // Show bot response with animated thinking dots
+          // Show bot response asking for directory selection
           var botBubble = $('<div class="d-flex mb-3">' +
             '<div class="img_cont_msg" style="margin-right: 12px;">' +
               '<img src="https://media.licdn.com/dms/image/v2/D560BAQHK10HmqRh1rQ/company-logo_200_200/company-logo_200_200/0/1701815665068/wealthboom_logo?e=1755129600&v=beta&t=0RhPS_izHlCe2NRvKtO7mgT7LXo6T87muFlK-HR_noE" class="rounded-circle user_img_msg" style="width: 40px; height: 40px; object-fit: cover;">' +
             '</div>' +
             '<div class="p-3 rounded" style="background: #23272f; color: #fff; border-radius: 16px 16px 16px 4px; max-width: 80%;">' +
-              '<b>BOOM Assistant</b><br><span id="' + currentChatId + '"><span class="thinking-dots"></span></span>' +
-              '</div>' +
-            '</div>'
-          );
+              '<b>BOOM Assistant</b><br>Select download directory for your Excel files.' +
+            '</div>' +
+          '</div>');
           $('#chat-messages').append(botBubble);
+
+          // Replace action buttons with directory selection form
+          $('#action-buttons').html(
+            '<form id="downloadForm" style="width: 100%; max-width: 800px; display: flex; align-items: center; gap: 1em; background: #23272f; border-radius: 16px; padding: 1em; justify-content: flex-end; margin-left: auto;">' +
+              '<div class="form-group mb-0" style="flex: 1;">' +
+                '<input type="text" id="downloadDir" placeholder="Enter download path (e.g., ~/Desktop/MyFiles)" class="form-control" required style="color: #fff; font-size: 1.25rem; font-weight: bold; background: #333; border: 1px solid #555; border-radius: 8px; padding: 12px;">' +
+              '</div>' +
+              '<button type="submit" class="btn btn-primary" style="margin: 0; background: #0ce308; border: none; padding: 12px 24px; border-radius: 8px; color: white; font-weight: bold;">Download</button>' +
+              '<div class="img_cont_msg" style="margin-left: 12px;">' +
+                '<img src="https://i.ibb.co/d5b84Xw/Untitled-design.png" class="rounded-circle user_img_msg" style="width: 40px; height: 40px; object-fit: cover;">' +
+              '</div>' +
+            '</form>'
+          );
 
           // Scroll to bottom
           scrollToBottom();
 
-          // DOWNLOAD XLSX FILE
-          $.ajax({
-            url: '/DOWNLOAD_XLSX_FILE',
-            type: 'POST',
-            success: function (data) {
-              if (data.success) {
-                $('#' + currentChatId).html('<span style="color: limegreen;">Download Xlsx File success!</span>');
-              } else {
-                $('#' + currentChatId).html('<span style="color: red;">Download Xlsx File failure.</span>');
+          // Handle download form submission
+          $('#downloadForm').off('submit').on('submit', function (event) {
+            event.preventDefault();
+            var downloadDir = $('#downloadDir').val().trim();
+            
+            if (!downloadDir) return;
+            
+            // Show user message bubble with selected directory
+            $('#chat-messages').append(
+              '<div class="d-flex mb-3 justify-content-end">' +
+                '<div class="p-3 rounded" style="background: #0ce308; color: #fff; border-radius: 16px 16px 4px 16px; display: flex; flex-direction: column; align-items: flex-end;">' +
+                  '<span style="font-weight: bold; margin-bottom: 2px;">You</span>' +
+                  '<span style="display: flex; align-items: center;">' +
+                    '<i class="fas fa-folder" style="margin-right: 6px;"></i>Download to: ' + downloadDir +
+                  '</span>' +
+                '</div>' +
+                '<div class="img_cont_msg" style="margin-left: 12px;">' +
+                  '<img src="https://i.ibb.co/d5b84Xw/Untitled-design.png" class="rounded-circle user_img_msg" style="width: 40px; height: 40px; object-fit: cover;">' +
+                '</div>' +
+              '</div>'
+            );
+
+            // Show bot "Downloading..." bubble with animated thinking dots
+            var downloadStatusId = 'download-status-' + chatCounter;
+            var botBubble = $('<div class="d-flex mb-3">' +
+              '<div class="img_cont_msg" style="margin-right: 12px;">' +
+                '<img src="https://media.licdn.com/dms/image/v2/D560BAQHK10HmqRh1rQ/company-logo_200_200/company-logo_200_200/0/1701815665068/wealthboom_logo?e=1755129600&v=beta&t=0RhPS_izHlCe2NRvKtO7mgT7LXo6T87muFlK-HR_noE" class="rounded-circle user_img_msg" style="width: 40px; height: 40px; object-fit: cover;">' +
+              '</div>' +
+              '<div class="p-3 rounded" style="background: #23272f; color: #fff; border-radius: 16px 16px 16px 4px; max-width: 80%;">' +
+                '<b>BOOM Assistant</b><br><span id="' + downloadStatusId + '"><span class="thinking-dots"></span></span>' +
+              '</div>' +
+            '</div>');
+            $('#chat-messages').append(botBubble);
+
+            // Scroll to bottom
+            scrollToBottom();
+
+            // DOWNLOAD XLSX FILE with custom directory
+            $.ajax({
+              url: '/DOWNLOAD_XLSX_FILE',
+              type: 'POST',
+              data: JSON.stringify({download_dir: downloadDir}),
+              contentType: 'application/json',
+              success: function (data) {
+                if (data.success) {
+                  $('#' + downloadStatusId).html('<span style="color: limegreen;">Download successful! Files saved to: ' + downloadDir + '</span>');
+                } else {
+                  $('#' + downloadStatusId).html('<span style="color: red;">Download failed: ' + (data.message || 'Unknown error') + '</span>');
+                }
+                
+                // Restore default button layout
+                $('#action-buttons').html(
+                  '<div style="display: flex; gap: 1em; justify-content: flex-end; align-items: center;">' +
+                    '<button id="UPLOAD_TXT_FILE" class="btn btn-primary" style="margin: 0; background: #d9510e; border: none; padding: 12px 24px; border-radius: 8px; color: white; font-weight: bold;">Upload Folder</button>' +
+                    '<button id="DOWNLOAD_XLSX_FILE" class="btn btn-primary" style="margin: 0; background: #0ce308; border: none; padding: 12px 24px; border-radius: 8px; color: white; font-weight: bold;">Download Xlsx File</button>' +
+                    '<div class="img_cont_msg" style="margin-left: 12px;">' +
+                      '<img src="https://i.ibb.co/d5b84Xw/Untitled-design.png" class="rounded-circle user_img_msg" style="width: 40px; height: 40px; object-fit: cover;">' +
+                    '</div>' +
+                  '</div>'
+                );
+                
+                // Re-attach event handlers for all buttons
+                attachButtonHandlers();
+              },
+              error: function () {
+                $('#' + downloadStatusId).html('<span style="color: red;">Download error occurred.</span>');
+                
+                // Restore default button layout
+                $('#action-buttons').html(
+                  '<div style="display: flex; gap: 1em; justify-content: flex-end; align-items: center;">' +
+                    '<button id="UPLOAD_TXT_FILE" class="btn btn-primary" style="margin: 0; background: #d9510e; border: none; padding: 12px 24px; border-radius: 8px; color: white; font-weight: bold;">Upload Folder</button>' +
+                    '<button id="DOWNLOAD_XLSX_FILE" class="btn btn-primary" style="margin: 0; background: #0ce308; border: none; padding: 12px 24px; border-radius: 8px; color: white; font-weight: bold;">Download Xlsx File</button>' +
+                    '<div class="img_cont_msg" style="margin-left: 12px;">' +
+                      '<img src="https://i.ibb.co/d5b84Xw/Untitled-design.png" class="rounded-circle user_img_msg" style="width: 40px; height: 40px; object-fit: cover;">' +
+                    '</div>' +
+                  '</div>'
+                );
+                
+                // Re-attach event handlers for all buttons
+                attachButtonHandlers();
               }
-            },
-            error: function () {
-              $('#' + currentChatId).html('<span style="color: red;">Download Xlsx File error.</span>');
-            }
+            });
           });
         });
       }
