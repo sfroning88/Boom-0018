@@ -78,27 +78,32 @@ def DOWNLOAD_XLSX_FILE():
     import support.config
     from tqdm import tqdm
     import os
+    import json
     
     if not support.config.files:
         return jsonify({'success': False, 'message': 'No files available for download.'}), 400
     
-    # Get the directory path from the first file to determine where to save
-    first_file_info = next(iter(support.config.files.values()))
-    first_filename = first_file_info['filename']
-    
-    # Extract directory path from the uploaded file structure
-    # Files from folder uploads have paths like "folder_name/subfolder/file.txt"
-    if '/' in first_filename:
-        # This is a folder upload, extract the base folder path
-        base_folder = first_filename.split('/')[0]
-        downloads_dir = os.path.expanduser(f"~/Downloads/{base_folder}")
-    else:
-        # Single file upload, use default downloads directory
+    # Get custom download directory from request
+    try:
+        data = request.get_json()
+        if data and 'download_dir' in data:
+            custom_dir = data['download_dir'].strip()
+            if custom_dir:
+                # Expand user path (e.g., ~/Desktop -> /Users/username/Desktop)
+                downloads_dir = os.path.expanduser(custom_dir)
+            else:
+                downloads_dir = os.path.expanduser("~/Downloads")
+        else:
+            downloads_dir = os.path.expanduser("~/Downloads")
+    except:
         downloads_dir = os.path.expanduser("~/Downloads")
     
     # Create downloads directory if it doesn't exist
     if not os.path.exists(downloads_dir):
-        os.makedirs(downloads_dir)
+        try:
+            os.makedirs(downloads_dir)
+        except Exception as e:
+            return jsonify({'success': False, 'message': f'Could not create directory {downloads_dir}: {str(e)}'}), 400
     
     print(f"Starting download of {len(support.config.files)} files to {downloads_dir}...")
     
@@ -109,19 +114,27 @@ def DOWNLOAD_XLSX_FILE():
         content = file_info['content']
         
         # Generate Excel filename
-        excel_filename = os.path.splitext(filename)[0] + '.xlsx'
+        excel_filename = os.path.splitext(os.path.basename(filename))[0] + '.xlsx'
         
-        # For folder uploads, maintain the subfolder structure
+        # For folder uploads, maintain the subfolder structure but avoid duplication
         if '/' in filename:
-            # Extract the subfolder path
-            subfolder_path = os.path.dirname(filename)
-            full_download_path = os.path.join(downloads_dir, subfolder_path)
-            
-            # Create subfolder if it doesn't exist
-            if not os.path.exists(full_download_path):
-                os.makedirs(full_download_path)
-            
-            file_path = os.path.join(full_download_path, excel_filename)
+            # Extract the subfolder path (everything after the base folder)
+            path_parts = filename.split('/')
+            if len(path_parts) > 1:
+                # Skip the base folder name and join the rest
+                subfolder_path = '/'.join(path_parts[1:-1])  # Exclude base folder and filename
+                if subfolder_path:
+                    full_download_path = os.path.join(downloads_dir, subfolder_path)
+                    # Create subfolder if it doesn't exist
+                    if not os.path.exists(full_download_path):
+                        os.makedirs(full_download_path)
+                    file_path = os.path.join(full_download_path, excel_filename)
+                else:
+                    # No subfolder, save directly in base folder
+                    file_path = os.path.join(downloads_dir, excel_filename)
+            else:
+                # Fallback: save directly in base folder
+                file_path = os.path.join(downloads_dir, excel_filename)
         else:
             file_path = os.path.join(downloads_dir, excel_filename)
         
