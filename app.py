@@ -17,35 +17,60 @@ def home():
 # upload the txt file
 @app.route('/UPLOAD_TXT_FILE', methods=['POST'])
 def UPLOAD_TXT_FILE():
-    file = request.files.get('file')
-    if not file:
-            return jsonify({'success': False, 'message': 'No file detected.'}), 400
+    files = request.files.getlist('file')
+    if not files:
+        return jsonify({'success': False, 'message': 'No files detected.'}), 400
 
     from support.extension import ALLOWED_EXTENSIONS, retrieve_extension
-    if retrieve_extension(file.filename) not in ALLOWED_EXTENSIONS:
-        return jsonify({'success': False, 'message': 'Incorrect filetype uploaded.'}), 400
+    
+    # Filter only txt files
+    txt_files = []
+    for file in files:
+        if retrieve_extension(file.filename) in ALLOWED_EXTENSIONS:
+            txt_files.append(file)
+    
+    if not txt_files:
+        return jsonify({'success': False, 'message': 'No valid txt files found in folder.'}), 400
 
-    from functions.t2c import convert_t2c
-    converted_file = convert_t2c(file=file)
+    print(f"Processing {len(txt_files)} txt files from folder upload")
+    
+    # Process each file with progress bar
+    from tqdm import tqdm
+    processed_files = {}
+    
+    for file in tqdm(txt_files, desc="Converting txt files"):
+        try:
+            from functions.t2c import convert_t2c
+            converted_file = convert_t2c(file=file)
 
-    if converted_file is None:
-        print(f"ERROR: File was not converted into csv successfully")
-        return jsonify({'success': False, 'message': 'Could not convert to csv.'}), 400
+            if converted_file is None:
+                print(f"ERROR: File {file.filename} was not converted into csv successfully")
+                continue
 
-    from functions.c2x import convert_c2x
-    converted_file = convert_c2x(converted_file=converted_file)
+            from functions.c2x import convert_c2x
+            converted_file = convert_c2x(converted_file=converted_file)
 
-    if converted_file is None:
-        print(f"ERROR: File was not converted into xlsx successfully")
-        return jsonify({'success': False, 'message': 'Could not convert to xlsx.'}), 400
+            if converted_file is None:
+                print(f"ERROR: File {file.filename} was not converted into xlsx successfully")
+                continue
 
-    from support.generate import generate_code
-    code = generate_code(file.filename)
+            from support.generate import generate_code
+            code = generate_code(file.filename)
+            
+            processed_files[code] = {'filename': file.filename, 'content': converted_file}
+            
+        except Exception as e:
+            print(f"ERROR: Failed to process file {file.filename}: {e}")
+            continue
 
+    if not processed_files:
+        return jsonify({'success': False, 'message': 'No files were successfully converted.'}), 400
+
+    # Store all processed files in config
     import support.config
-    support.config.files[code] = {'filename': file.filename, 'content': converted_file}
+    support.config.files.update(processed_files)
 
-    return jsonify({'success': True, 'message': 'Uploading txt file success.'}), 200
+    return jsonify({'success': True, 'message': f'Successfully processed {len(processed_files)} files from folder.'}), 200
 
 # download the xlsx file
 @app.route('/DOWNLOAD_XLSX_FILE', methods=['POST'])
@@ -57,21 +82,48 @@ def DOWNLOAD_XLSX_FILE():
     if not support.config.files:
         return jsonify({'success': False, 'message': 'No files available for download.'}), 400
     
-    # Create downloads directory if it doesn't exist
-    downloads_dir = os.path.expanduser("~/Downloads")
-    if not os.path.exists(downloads_dir):
-        downloads_dir = os.getcwd()  # Fallback to current directory
+    # Get the directory path from the first file to determine where to save
+    first_file_info = next(iter(support.config.files.values()))
+    first_filename = first_file_info['filename']
     
-    print(f"Starting download of {len(support.config.files)} files...")
+    # Extract directory path from the uploaded file structure
+    # Files from folder uploads have paths like "folder_name/subfolder/file.txt"
+    if '/' in first_filename:
+        # This is a folder upload, extract the base folder path
+        base_folder = first_filename.split('/')[0]
+        downloads_dir = os.path.expanduser(f"~/Downloads/{base_folder}")
+    else:
+        # Single file upload, use default downloads directory
+        downloads_dir = os.path.expanduser("~/Downloads")
+    
+    # Create downloads directory if it doesn't exist
+    if not os.path.exists(downloads_dir):
+        os.makedirs(downloads_dir)
+    
+    print(f"Starting download of {len(support.config.files)} files to {downloads_dir}...")
     
     # Download each file with progress bar
+    successful_downloads = 0
     for code, file_info in tqdm(support.config.files.items(), desc="Downloading files"):
         filename = file_info['filename']
         content = file_info['content']
         
         # Generate Excel filename
         excel_filename = os.path.splitext(filename)[0] + '.xlsx'
-        file_path = os.path.join(downloads_dir, excel_filename)
+        
+        # For folder uploads, maintain the subfolder structure
+        if '/' in filename:
+            # Extract the subfolder path
+            subfolder_path = os.path.dirname(filename)
+            full_download_path = os.path.join(downloads_dir, subfolder_path)
+            
+            # Create subfolder if it doesn't exist
+            if not os.path.exists(full_download_path):
+                os.makedirs(full_download_path)
+            
+            file_path = os.path.join(full_download_path, excel_filename)
+        else:
+            file_path = os.path.join(downloads_dir, excel_filename)
         
         try:
             # Reset buffer position and write to file
@@ -79,11 +131,12 @@ def DOWNLOAD_XLSX_FILE():
             with open(file_path, 'wb') as f:
                 f.write(content.read())
             print(f"Downloaded: {excel_filename}")
+            successful_downloads += 1
         except Exception as e:
             print(f"ERROR: Could not download {excel_filename}: {e}")
     
-    print("Download complete!")
-    return jsonify({'success': True, 'message': f'Downloaded {len(support.config.files)} files to {downloads_dir}'}), 200
+    print(f"Download complete! Successfully downloaded {successful_downloads} out of {len(support.config.files)} files")
+    return jsonify({'success': True, 'message': f'Downloaded {successful_downloads} files to {downloads_dir}'}), 200
     
 if __name__ == '__main__':
     if len(sys.argv) != 1:
